@@ -6,92 +6,84 @@
 #include <iostream>
 #include <stdexcept>
 
+template <typename Derived, typename T> class LinkedListIteratorBase;
+template <typename D, typename T>
+bool operator==(const LinkedListIteratorBase<D, T> &, const LinkedListIteratorBase<D, T> &);
+template <typename D, typename T>
+bool operator!=(const LinkedListIteratorBase<D, T> &, const LinkedListIteratorBase<D, T> &);
 template <typename T> class LinkedList;
 template <typename T> class LinkedListIterator;
-template <typename T> bool operator==(const LinkedListIterator<T> &, const LinkedListIterator<T> &);
-template <typename T> bool operator!=(const LinkedListIterator<T> &, const LinkedListIterator<T> &);
 template <typename T> class LinkedListConstIterator;
-template <typename T> bool operator==(const LinkedListConstIterator<T> &, const LinkedListConstIterator<T> &);
-template <typename T> bool operator!=(const LinkedListConstIterator<T> &, const LinkedListConstIterator<T> &);
 template <typename T> class Node;
 
-template <typename T>
-class LinkedListIterator {
-	friend bool operator==<T>(const LinkedListIterator<T> &, const LinkedListIterator<T> &);
+template <typename Derived, typename T>
+class LinkedListIteratorBase {
+	friend bool operator==<Derived, T>
+		(const LinkedListIteratorBase<Derived, T> &, const LinkedListIteratorBase<Derived, T> &);
 public:
-	LinkedListIterator() : node(nullptr) {}
-	LinkedListIterator(Node<T> *n) : node(n) {}
+	// Default constructor, node pointer is null
+	LinkedListIteratorBase() = default;
+	// Constructor, makes node denote the given node
+	LinkedListIteratorBase(Node<T> *n) : node(n) {}
 
+	// Prefix increment, make node point to the next element,
+	// return this object
+	Derived &operator++() {
+		if (!node)
+			throw std::runtime_error("increment past end of list");
+		node = node->next;
+		return static_cast<Derived &>(*this);
+	}
+	// Postfix increment, make node point to the next element,
+	// return the old value
+	Derived operator++(int) {
+		Derived old = static_cast<Derived &>(*this);
+		++*this;
+		return old;
+	}
+	// Explicit bool conversion: will be used implicitly in conditions,
+	// can be casted explicitly, returns false if node is null, else true
+	explicit operator bool() const {
+		return node;
+	}
+protected:
+	Node<T> *node = nullptr;
+};
+
+template <typename D, typename T>
+bool operator==(const LinkedListIteratorBase<D, T> &lhs, const LinkedListIteratorBase<D, T> &rhs) {
+	return lhs.node == rhs.node;
+}
+template <typename D, typename T>
+bool operator!=(const LinkedListIteratorBase<D, T> &lhs, const LinkedListIteratorBase<D, T> &rhs) {
+	return !(lhs == rhs);
+}
+
+template <typename T>
+class LinkedListIterator : public LinkedListIteratorBase<LinkedListIterator<T>, T> {
+public:
+	using LinkedListIteratorBase<LinkedListIterator<T>, T>::LinkedListIteratorBase;
+
+	// Return a plain reference to the denoted element
 	T &operator*() const {
-		if (!node)
+		if (!this->node)
 			throw std::runtime_error("dereference past end");
-		return node->val;
+		return this->node->val;
 	}
-	LinkedListIterator &operator++() {
-		node = node->next;
-		return *this;
-	}
-	LinkedListIterator operator++(int) {
-		LinkedListIterator old = *this;
-		++*this;
-		return old;
-	}
-
-	explicit operator bool() const {
-		return node;
-	}
-private:
-	Node<T> *node;
 };
 
 template <typename T>
-bool operator==(const LinkedListIterator<T> &lhs, const LinkedListIterator<T> &rhs) {
-	return lhs.node == rhs.node;
-}
-
-template <typename T>
-bool operator!=(const LinkedListIterator<T> &lhs, const LinkedListIterator<T> &rhs) {
-	return !(lhs == rhs);
-}
-
-template <typename T>
-class LinkedListConstIterator {
-	friend bool operator==<T>(const LinkedListConstIterator<T> &, const LinkedListConstIterator<T> &);
+class LinkedListConstIterator : public LinkedListIteratorBase<LinkedListConstIterator<T>, T> {
 public:
-	LinkedListConstIterator() : node(nullptr)  {}
-	LinkedListConstIterator(const Node<T> *n) : node(n) {}
-
+	using LinkedListIteratorBase<LinkedListConstIterator<T>, T>::LinkedListIteratorBase;
+	
+	// Return a reference to const to the denoted element
 	const T &operator*() const {
-		if (!node)
+		if (!this->node)
 			throw std::runtime_error("dereference past end");
-		return node->val;
+		return this->node->val;
 	}
-	LinkedListConstIterator &operator++() {
-		node = node->next;
-		return *this;
-	}
-	LinkedListConstIterator operator++(int) {
-		LinkedListConstIterator old = *this;
-		++*this;
-		return old;
-	}
-
-	explicit operator bool() const {
-		return node;
-	}
-private:
-	const Node<T> *node;
 };
-
-template <typename T>
-bool operator==(const LinkedListConstIterator<T> &lhs, const LinkedListConstIterator<T> &rhs) {
-	return lhs.node == rhs.node;
-}
-
-template <typename T>
-bool operator!=(const LinkedListConstIterator<T> &lhs, const LinkedListConstIterator<T> &rhs) {
-	return !(lhs == rhs);
-}
 
 template <typename T>
 class LinkedList {
@@ -99,23 +91,41 @@ public:
 	typedef LinkedListIterator<T> iterator;
 	typedef LinkedListConstIterator<T> const_iterator;
 
+	// Default constructor to leave head as a nullptr
 	LinkedList() = default;
+	// Constructor that allocates default initialized elements of size n
 	explicit LinkedList(std::size_t n) {
 		init(n);
 	}
+	// Constructor that allocates n elements with a given e value
 	LinkedList(std::size_t n, const T &e) {
 		init(n, e);
 	}
+	// Copy constructor, valuelike: copies all elements one-by-one
 	LinkedList(const LinkedList &li) {
-		copy_list(li);
+		head = copy_list(li);
 	}
+	// Move constructor, takes ownership of the given list's pointer and
+	// nullifies it in the given list, to make its free member not delete our new
+	// moved values
 	LinkedList(LinkedList &&li) noexcept : head(li.head) {
 		li.head = nullptr;
 	}
+	// Copy assignment operator, makes a copy of the elements from the given list,
+	// then frees the previous elements, and assigns the head to point to the 
+	// first element from the copied Nodes
+	// Self assignment ready, as it copies before freeing
 	LinkedList &operator=(const LinkedList &rhs) {
-		
+		Node<T> *data = copy_list(rhs);
+		free();
+		head = data;
 		return *this;
 	}
+	// Move assignment operator, frees current elements, then takes ownership
+	// of the given list's pointer to the first element of the list,
+	// then assigns a nullptr to the given list's pointer to prevent freeing
+	// our moved elements
+	// Self assignment ready: explicit address checking
 	LinkedList &operator=(LinkedList &&rhs) noexcept {
 		if (this != &rhs) {
 			free();
@@ -124,11 +134,12 @@ public:
 		}
 		return *this;
 	}
-
+	// Destructor calls free, deletes each element from first to last
 	~LinkedList() {
 		free();
 	}
 
+	// Insertion to the front of the list: copies its argument
 	void push_front(const T &e) {
 		if (!head) {
 			head = new Node<T>(e);
@@ -138,6 +149,7 @@ public:
 			head->next = curr;
 		}
 	}
+	// Insertion to the front of the list: moves its argument
 	void push_front(T &&e) {
 		if (!head) {
 			head = new Node<T>(std::move(e));
@@ -148,6 +160,7 @@ public:
 		}
 	}
 
+	// Erases first element of the list, or does nothing if the list is empty
 	void pop_front() {
 		if (!head) return;
 		Node<T> *curr = head->next;
@@ -155,25 +168,33 @@ public:
 		head = curr;
 	}
 	
+	// Returns a modifiable iterator to the first element
 	iterator begin() {
 		return iterator(head);
 	}
+	// Returns a non-modifiable iterator to the first element implicitly,
+	// if the list is const
 	const_iterator begin() const {
 		return cbegin();
 	}
+	// Returns a non-modifiable iterator to the first element explicitly
 	const_iterator cbegin() const {
 		return const_iterator(head);
 	}
+	// Returns a modifiable off-the-end iterator
 	iterator end() {
 		return iterator(nullptr);
 	}
+	// Returns a non-modifiable off-the-end iterator implicitly if the list is const
 	const_iterator end() const {
 		return cend();
 	}
+	// Returns a non-modifiable off-the-end iterator explicitly
 	const_iterator cend() const {
 		return const_iterator(nullptr);
 	}
 private:
+	// Does the work of the constructor with the same parameter
 	void init(std::size_t n) {
 		// If size is 0, don't allocate Nodes and keep the head a nullptr
 		if (!n) return;
@@ -184,6 +205,7 @@ private:
 			curr = curr->next;
 		}
 	}
+	// Does the work of the constructor with the same parameters
 	void init(std::size_t n, const T &e) {
 		if (!n) return;
 		head = new Node<T>(e);
@@ -193,17 +215,22 @@ private:
 			curr = curr->next;
 		}
 	}
-	void copy_list(const LinkedList &li) {
-		if (!li.cbegin()) return;
+	
+	// Makes a copy of the given list, and returns a pointer to the first element,
+	// or a nullptr if the given list was empty
+	Node<T> *copy_list(const LinkedList &li) {
+		if (li.cbegin() == li.cend())
+			return nullptr;
 		const_iterator it = li.cbegin();
-		head = new Node<T>(*it++);
-		Node<T> *curr = head;
+		Node<T> *data = new Node<T>(*it++), *curr = data;
 		while (it != li.cend()) {
 			curr->next = new Node<T>(*it++);
 			curr = curr->next;
 		}
+		return data;
 	}
-
+	
+	// Deletes each element from front to back
 	void free() {
 		Node<T> *curr = head;
 		while (curr) {
@@ -211,15 +238,16 @@ private:
 			delete curr;
 			curr = next;
 		}
-		head = nullptr;
 	}
 
+	// Holds the address of the first element in the list
 	Node<T> *head = nullptr;
 };
 
 template <typename T>
 class Node {
 	friend class LinkedList<T>;
+	template <typename D, typename T2> friend class LinkedListIteratorBase;
 	friend class LinkedListIterator<T>;
 	friend class LinkedListConstIterator<T>;
 public:
@@ -227,7 +255,9 @@ public:
 	Node(T &&e) noexcept : val(std::move(e)), next(nullptr) {}
 
 private:
+	// Held value
 	T val;
+	// Pointer to the next element
 	Node *next;
 };
 
