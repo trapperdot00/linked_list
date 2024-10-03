@@ -22,7 +22,7 @@ public:
 	LinkedListIterator() : node(nullptr) {}
 	LinkedListIterator(Node<T> *n) : node(n) {}
 
-	T &operator*() {
+	T &operator*() const {
 		if (!node)
 			throw std::runtime_error("dereference past end");
 		return node->val;
@@ -37,6 +37,9 @@ public:
 		return old;
 	}
 
+	explicit operator bool() const {
+		return node;
+	}
 private:
 	Node<T> *node;
 };
@@ -58,7 +61,7 @@ public:
 	LinkedListConstIterator() : node(nullptr)  {}
 	LinkedListConstIterator(const Node<T> *n) : node(n) {}
 
-	const T &operator*() {
+	const T &operator*() const {
 		if (!node)
 			throw std::runtime_error("dereference past end");
 		return node->val;
@@ -73,6 +76,9 @@ public:
 		return old;
 	}
 
+	explicit operator bool() const {
+		return node;
+	}
 private:
 	const Node<T> *node;
 };
@@ -89,7 +95,6 @@ bool operator!=(const LinkedListConstIterator<T> &lhs, const LinkedListConstIter
 
 template <typename T>
 class LinkedList {
-
 public:
 	typedef LinkedListIterator<T> iterator;
 	typedef LinkedListConstIterator<T> const_iterator;
@@ -101,7 +106,25 @@ public:
 	LinkedList(std::size_t n, const T &e) {
 		init(n, e);
 	}
-	
+	LinkedList(const LinkedList &li) {
+		copy_list(li);
+	}
+	LinkedList(LinkedList &&li) noexcept : head(li.head) {
+		li.head = nullptr;
+	}
+	LinkedList &operator=(const LinkedList &rhs) {
+		
+		return *this;
+	}
+	LinkedList &operator=(LinkedList &&rhs) noexcept {
+		if (this != &rhs) {
+			free();
+			head = rhs.head;
+			rhs.head = nullptr;
+		}
+		return *this;
+	}
+
 	~LinkedList() {
 		free();
 	}
@@ -123,6 +146,13 @@ public:
 			head = new Node<T>(std::move(e));
 			head->next = curr;
 		}
+	}
+
+	void pop_front() {
+		if (!head) return;
+		Node<T> *curr = head->next;
+		delete head;
+		head = curr;
 	}
 	
 	iterator begin() {
@@ -163,6 +193,16 @@ private:
 			curr = curr->next;
 		}
 	}
+	void copy_list(const LinkedList &li) {
+		IF (!li.cbegin()) return;
+		const_iterator it = li.cbegin();
+		head = new Node<T>(*it++);
+		Node<T> *curr = head;
+		while (it != li.cend()) {
+			curr->next = new Node<T>(*it++);
+			curr = curr->next;
+		}
+	}
 
 	void free() {
 		Node<T> *curr = head;
@@ -171,6 +211,7 @@ private:
 			delete curr;
 			curr = next;
 		}
+		head = nullptr;
 	}
 
 	Node<T> *head = nullptr;
