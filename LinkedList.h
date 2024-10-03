@@ -11,17 +11,19 @@ template <typename D, typename T>
 bool operator==(const LinkedListIteratorBase<D, T> &, const LinkedListIteratorBase<D, T> &);
 template <typename D, typename T>
 bool operator!=(const LinkedListIteratorBase<D, T> &, const LinkedListIteratorBase<D, T> &);
-template <typename T> class LinkedList;
 template <typename T> class LinkedListIterator;
 template <typename T> class LinkedListConstIterator;
+template <typename T> class LinkedList;
 template <typename T> class Node;
 
+// Base class for the Linked List iterators,
+// contains common code, to avoid duplication
 template <typename Derived, typename T>
 class LinkedListIteratorBase {
 	friend bool operator==<Derived, T>
 		(const LinkedListIteratorBase<Derived, T> &, const LinkedListIteratorBase<Derived, T> &);
 public:
-	// Default constructor, node pointer is null
+	// Default constructor, node pointer is null: uses in-class initializer
 	LinkedListIteratorBase() = default;
 	// Constructor, makes node denote the given node
 	LinkedListIteratorBase(Node<T> *n) : node(n) {}
@@ -36,6 +38,7 @@ public:
 	}
 	// Postfix increment, make node point to the next element,
 	// return the old value
+	// Delegates work to the prefix increment operator, preventing code duplication
 	Derived operator++(int) {
 		Derived old = static_cast<Derived &>(*this);
 		++*this;
@@ -50,15 +53,21 @@ protected:
 	Node<T> *node = nullptr;
 };
 
+// Equality operator, checks if two iterators point to the same Node
 template <typename D, typename T>
 bool operator==(const LinkedListIteratorBase<D, T> &lhs, const LinkedListIteratorBase<D, T> &rhs) {
 	return lhs.node == rhs.node;
 }
+// Inequality operator, checks whether two iterators point to two different Nodes
+// Delegates work to the Equality operator, thus preventing duplicated code
 template <typename D, typename T>
 bool operator!=(const LinkedListIteratorBase<D, T> &lhs, const LinkedListIteratorBase<D, T> &rhs) {
 	return !(lhs == rhs);
 }
 
+// Linked List iterator that the non-const versions of begin and end return
+// Dereferencing with a * operator returns a non-const reference to the
+// value that is held by the denoted Node pointer
 template <typename T>
 class LinkedListIterator : public LinkedListIteratorBase<LinkedListIterator<T>, T> {
 public:
@@ -70,8 +79,15 @@ public:
 			throw std::runtime_error("dereference past end");
 		return this->node->val;
 	}
+	T *operator->() const {
+		return &(this->operator*());
+	}
 };
 
+// Linked List iterator that the const versions of begin, end and the cbegin, cend
+// member functions return
+// Dereferencing with a * operator returns a const reference to the value that is held
+// by the denoted Node pointer
 template <typename T>
 class LinkedListConstIterator : public LinkedListIteratorBase<LinkedListConstIterator<T>, T> {
 public:
@@ -83,8 +99,15 @@ public:
 			throw std::runtime_error("dereference past end");
 		return this->node->val;
 	}
+	const T *operator->() const {
+		return &(this->operator*());
+	}
 };
 
+// Class that the user should interact with, acts as an interface
+// to the whole class family
+// Can get iterators via (c)begin/(c)end members
+// Nodes managed by the implementation of the class
 template <typename T>
 class LinkedList {
 public:
@@ -138,26 +161,35 @@ public:
 	~LinkedList() {
 		free();
 	}
-
+	
+	T &front() {
+		if (!head)
+			throw std::runtime_error("front on empty LinkedList");
+		return head->val;
+	}
+	const T &front() const {
+		if (!head)
+			throw std::runtime_error("front on empty LinkedList");
+		return head->val;
+	}
 	// Insertion to the front of the list: copies its argument
 	void push_front(const T &e) {
-		if (!head) {
-			head = new Node<T>(e);
-		} else {
-			Node<T> *curr = head;
-			head = new Node<T>(e);
-			head->next = curr;
-		}
+		Node<T> *data = new Node<T>(e);
+		data->next = head;
+		head = data;
 	}
 	// Insertion to the front of the list: moves its argument
 	void push_front(T &&e) {
-		if (!head) {
-			head = new Node<T>(std::move(e));
-		} else {
-			Node<T> *curr = head;
-			head = new Node<T>(std::move(e));
-			head->next = curr;
-		}
+		Node<T> *data = new Node<T>(std::move(e));
+		data->next = head;
+		head = data;
+	}
+
+	template <typename... Args>
+	void emplace_front(Args&&... args) {
+		Node<T> *data = new Node<T>(std::forward<Args>(args)...);
+		data->next = head;
+		head = data;
 	}
 
 	// Erases first element of the list, or does nothing if the list is empty
@@ -166,6 +198,12 @@ public:
 		Node<T> *curr = head->next;
 		delete head;
 		head = curr;
+	}
+
+	// Delete all elements
+	void clear() {
+		free();
+		head = nullptr;
 	}
 	
 	// Returns a modifiable iterator to the first element
@@ -244,6 +282,8 @@ private:
 	Node<T> *head = nullptr;
 };
 
+// Node class, data members managed by friend classes
+// Users can only access the val member using the iterators
 template <typename T>
 class Node {
 	friend class LinkedList<T>;
@@ -251,8 +291,13 @@ class Node {
 	friend class LinkedListIterator<T>;
 	friend class LinkedListConstIterator<T>;
 public:
+	// Constructs a Node, with the copy of the given value, and a null next pointer
 	Node(const T &e) : val(e), next(nullptr) {}
+	// Constructs a Node, moving the given value, and making the next pointer null
 	Node(T &&e) noexcept : val(std::move(e)), next(nullptr) {}
+	// Variadic template constructor, constructs val with the given arguments
+	template <typename... Args>
+	Node(Args&&... args) : val(args...), next(nullptr) {}
 
 private:
 	// Held value
