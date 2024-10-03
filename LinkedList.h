@@ -194,7 +194,7 @@ private:
 		}
 	}
 	void copy_list(const LinkedList &li) {
-		IF (!li.cbegin()) return;
+		if (!li.cbegin()) return;
 		const_iterator it = li.cbegin();
 		head = new Node<T>(*it++);
 		Node<T> *curr = head;
