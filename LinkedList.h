@@ -112,11 +112,11 @@ public:
 template <typename T>
 class LinkedList {
 public:
-    typedef T value_type;
-    typedef std::size_t size_type;
-    typedef std::ptrdiff_t difference_type;
-    typedef T& reference;
-    typedef const T& const_reference;
+	typedef T value_type;
+	typedef std::size_t size_type;
+	typedef std::ptrdiff_t difference_type;
+	typedef T& reference;
+	typedef const T& const_reference;
 	typedef LinkedListIterator<T> iterator;
 	typedef LinkedListConstIterator<T> const_iterator;
 
