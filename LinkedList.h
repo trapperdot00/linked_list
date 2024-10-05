@@ -2,6 +2,7 @@
 #define LINKEDLIST_H
 
 #include <cstddef>
+#include <type_traits>
 #include <utility>
 #include <iostream>
 #include <stdexcept>
@@ -27,7 +28,7 @@ public:
 	// Default constructor, node pointer is null: uses in-class initializer
 	LinkedListIteratorBase() = default;
 	// Constructor, makes node denote the given node
-	LinkedListIteratorBase(Node<T> *n) : node(n) {}
+	LinkedListIteratorBase(Node<T> *n, bool l = false) : node(n), before_begin(l) {}
 
 	// Prefix increment, make node point to the next element,
 	// return this object
@@ -35,6 +36,8 @@ public:
 		if (!node)
 			throw std::runtime_error("increment past end of list");
 		node = node->next;
+		if (before_begin)
+			before_begin = false;
 		return static_cast<Derived &>(*this);
 	}
 	// Postfix increment, make node point to the next element,
@@ -52,6 +55,7 @@ public:
 	}
 protected:
 	Node<T> *node = nullptr;
+	bool before_begin = false;
 };
 
 // Equality operator, checks if two iterators point to the same Node
@@ -78,8 +82,11 @@ public:
 	T &operator*() const {
 		if (!this->node)
 			throw std::runtime_error("dereference past end");
+		if (this->before_begin)
+			throw std::runtime_error("dereferencing illegal iterator");
 		return this->node->val;
 	}
+	// Returns the address of the denoted element
 	T *operator->() const {
 		return &(this->operator*());
 	}
@@ -98,12 +105,30 @@ public:
 	const T &operator*() const {
 		if (!this->node)
 			throw std::runtime_error("dereference past end");
+		if (this->before_begin)
+			throw std::runtime_error("dereferencing illegal iterator");
 		return this->node->val;
 	}
+	// Returns the address of the denoted element
 	const T *operator->() const {
 		return &(this->operator*());
 	}
 };
+
+// SFINAE
+// Default type trait defaults to std::false_type
+template <typename T, typename = void>
+struct is_input_iterator : std::false_type {};
+
+// If T supports postfix incremention, dereferencing, and 
+// equality comparison, then matches this type trait:
+// becomes std::true_type
+template <typename T>
+struct is_input_iterator<T, std::void_t<
+		decltype(std::declval<T&>()++),
+		decltype(*std::declval<T&>()),
+		decltype(std::declval<T&>() == std::declval<T&>())>
+> : std::true_type {};
 
 // Class that the user should interact with, acts as an interface
 // to the whole class family
@@ -123,33 +148,39 @@ public:
 	// Default constructor to leave head as a nullptr
 	LinkedList() = default;
 	// Constructor that allocates default initialized elements of size n
-	explicit LinkedList(std::size_t n) {
+	explicit LinkedList(size_type n) {
 		init(n);
 	}
 	// Constructor that allocates n elements with a given e value
-	LinkedList(std::size_t n, const T &e) {
+	LinkedList(size_type n, const T &e) {
 		init(n, e);
 	}
-	// Constructor that takes an initializer list, and constructs each element from the values in the initializer list
+	// Constructor that takes an initializer list,
+	// and constructs each element from the values in the initializer list
 	template <typename T2>
 	LinkedList(std::initializer_list<T2> il) {
-	    head = copy_from_iterrange(il.begin(), il.end());
+		head = copy_from_iterrange(il.begin(), il.end());
+		dummy->next = head;
 	}
 	// Constructor that takes an iterator range and constructs each element from those in the range
 	// Element type in the given range can differ from the type in the list, if a conversion exists
-	template <typename It>
+	// 'It' must allow dereferencing, postfix incrementing and have an overloaded equality operator
+	template <typename It, typename = std::enable_if_t<is_input_iterator<It>::value>>
 	LinkedList(It b, It e) {
-	    head = copy_from_iterrange(b, e);
+		head = copy_from_iterrange(b, e);
+		dummy->next = head;
 	}
 	// Copy constructor, valuelike: copies all elements one-by-one
 	LinkedList(const LinkedList &li) {
 		head = copy_list(li);
+		dummy->next = head;
 	}
 	// Move constructor, takes ownership of the given list's pointer and
 	// nullifies it in the given list, to make its free member not delete our new
 	// moved values
-	LinkedList(LinkedList &&li) noexcept : head(li.head) {
+	LinkedList(LinkedList &&li) noexcept : head(li.head), dummy(li.dummy) {
 		li.head = nullptr;
+		li.dummy = nullptr;
 	}
 	// Copy assignment operator, makes a copy of the elements from the given list,
 	// then frees the previous elements, and assigns the head to point to the 
@@ -159,6 +190,7 @@ public:
 		Node<T> *data = copy_list(rhs);
 		free();
 		head = data;
+		dummy->next = head;
 		return *this;
 	}
 	// Move assignment operator, frees current elements, then takes ownership
@@ -170,13 +202,27 @@ public:
 		if (this != &rhs) {
 			free();
 			head = rhs.head;
+			dummy = rhs.dummy;
 			rhs.head = nullptr;
+			rhs.dummy = nullptr;
 		}
 		return *this;
 	}
+	// Assignment operator that takes an initializer list, frees elements,
+	// then copies all elements from il, and head will either point to the
+	// first copied element, or be a nullptr if the initializer list was empty
+	template <typename T2>
+	LinkedList &operator=(std::initializer_list<T2> il) {
+		free();
+		head = copy_from_iterrange(il.begin(), il.end());
+		dummy->next = head;
+		return *this;
+	}
+
 	// Destructor calls free, deletes each element from first to last
 	~LinkedList() {
 		free();
+		delete dummy;
 	}
 	// Returns a reference to the first element in the list, or throws a runtime_error if the list is empty
 	T &front() {
@@ -196,12 +242,14 @@ public:
 		Node<T> *data = new Node<T>(e);
 		data->next = head;
 		head = data;
+		dummy->next = head;
 	}
 	// Insertion to the front of the list: moves its argument
 	void push_front(T &&e) {
 		Node<T> *data = new Node<T>(std::move(e));
 		data->next = head;
 		head = data;
+		dummy->next = head;
 	}
 	
 	// Constructs a new element to the front of the list, forwarding the given arguments to the object's constructor
@@ -210,6 +258,7 @@ public:
 		Node<T> *data = new Node<T>(std::forward<Args>(args)...);
 		data->next = head;
 		head = data;
+		dummy->next = head;
 	}
 
 	// Erases first element of the list, or does nothing if the list is empty
@@ -218,12 +267,14 @@ public:
 		Node<T> *curr = head->next;
 		delete head;
 		head = curr;
+		dummy->next = head;
 	}
 
 	// Delete all elements
 	void clear() {
 		free();
 		head = nullptr;
+		dummy->next = nullptr;
 	}
 	
 	// Returns a modifiable iterator to the first element
@@ -251,24 +302,43 @@ public:
 	const_iterator cend() const {
 		return const_iterator(nullptr);
 	}
+
+	// Returns a modifiable off-the-beginning iterator, denoting the dummy Node,
+	// the iterator is not dereferencable until incremented
+	iterator before_begin() {
+		return iterator(dummy, true);
+	}
+	// Returns a non-modifiable off-the-beginning iterator denoting the dummy Node
+	// implicitly if the list is const,
+	// the iterator is not dereferencable until incremented
+	const_iterator before_begin() const {
+		return cbefore_begin();
+	}
+	// Returns a non-modifiable off-the-beginning iterator denoting the dummy Node
+	// explicitly, the iterator is not dereferencable until incremented
+	const_iterator cbefore_begin() const {
+		return const_iterator(dummy, true);
+	}
 private:
 	// Does the work of the constructor with the same parameter
-	void init(std::size_t n) {
+	void init(size_type n) {
 		// If size is 0, don't allocate Nodes and keep the head a nullptr
 		if (!n) return;
-		head = new Node<T>(T());	
+		head = new Node<T>(T());
+		dummy->next = head;
 		Node<T> *curr = head;
-		for (std::size_t i = 1; i < n; ++i) {
+		for (size_type i = 1; i < n; ++i) {
 			curr->next = new Node<T>(T());
 			curr = curr->next;
 		}
 	}
 	// Does the work of the constructor with the same parameters
-	void init(std::size_t n, const T &e) {
+	void init(size_type n, const T &e) {
 		if (!n) return;
 		head = new Node<T>(e);
+		dummy->next = head;
 		Node<T> *curr = head;
-		for (std::size_t i = 1; i < n; ++i) {
+		for (size_type i = 1; i < n; ++i) {
 			curr->next = new Node<T>(e);
 			curr = curr->next;
 		}
@@ -290,14 +360,14 @@ private:
 	// Copies all element from given iterator range, returns a pointer to the first element, or a nullptr if the range was empty
 	template <typename It>
 	Node<T> *copy_from_iterrange(It b, It e) {
-	    if (b == e)
-	        return nullptr;
-        Node<T> *data = new Node<T>(*b++), *curr = data;
-        while (b != e) {
-            curr->next = new Node<T>(*b++);
-            curr = curr->next;
-        }
-        return data;
+		if (b == e)
+			return nullptr;
+		Node<T> *data = new Node<T>(*b++), *curr = data;
+		while (b != e) {
+			curr->next = new Node<T>(*b++);
+			curr = curr->next;
+		}
+	return data;
 	}
 	
 	// Deletes each element from front to back
@@ -305,6 +375,11 @@ private:
 		Node<T> *curr = head;
 		while (curr) {
 			Node<T> *next = curr->next;
+
+			// DEBUG DELETION MESSAGE
+			// ERROR ON TYPES WITH NO OUTPUT OPERATOR OVERLOAD
+			std::cout << curr->val << " deleted" << std::endl;
+			
 			delete curr;
 			curr = next;
 		}
@@ -312,6 +387,9 @@ private:
 
 	// Holds the address of the first element in the list
 	Node<T> *head = nullptr;
+
+	// Dummy Node whose next pointer should point to head
+	Node<T> *dummy = new Node<T>(T());
 };
 
 // Node class, data members managed by friend classes
