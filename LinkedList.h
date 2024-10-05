@@ -5,6 +5,7 @@
 #include <utility>
 #include <iostream>
 #include <stdexcept>
+#include <initializer_list>
 
 template <typename Derived, typename T> class LinkedListIteratorBase;
 template <typename D, typename T>
@@ -111,6 +112,11 @@ public:
 template <typename T>
 class LinkedList {
 public:
+    typedef T value_type;
+    typedef std::size_t size_type;
+    typedef std::ptrdiff_t difference_type;
+    typedef T& reference;
+    typedef const T& const_reference;
 	typedef LinkedListIterator<T> iterator;
 	typedef LinkedListConstIterator<T> const_iterator;
 
@@ -123,6 +129,17 @@ public:
 	// Constructor that allocates n elements with a given e value
 	LinkedList(std::size_t n, const T &e) {
 		init(n, e);
+	}
+	// Constructor that takes an initializer list, and constructs each element from the values in the initializer list
+	template <typename T2>
+	LinkedList(std::initializer_list<T2> il) {
+	    head = copy_from_iterrange(il.begin(), il.end());
+	}
+	// Constructor that takes an iterator range and constructs each element from those in the range
+	// Element type in the given range can differ from the type in the list, if a conversion exists
+	template <typename It>
+	LinkedList(It b, It e) {
+	    head = copy_from_iterrange(b, e);
 	}
 	// Copy constructor, valuelike: copies all elements one-by-one
 	LinkedList(const LinkedList &li) {
@@ -161,12 +178,14 @@ public:
 	~LinkedList() {
 		free();
 	}
-	
+	// Returns a reference to the first element in the list, or throws a runtime_error if the list is empty
 	T &front() {
 		if (!head)
 			throw std::runtime_error("front on empty LinkedList");
 		return head->val;
 	}
+	// Returns a const reference to the first element in the list, or throws a runtime_error if the list is empty
+	// Overloaded on const: this will only be calles on const objects
 	const T &front() const {
 		if (!head)
 			throw std::runtime_error("front on empty LinkedList");
@@ -184,7 +203,8 @@ public:
 		data->next = head;
 		head = data;
 	}
-
+	
+	// Constructs a new element to the front of the list, forwarding the given arguments to the object's constructor
 	template <typename... Args>
 	void emplace_front(Args&&... args) {
 		Node<T> *data = new Node<T>(std::forward<Args>(args)...);
@@ -266,6 +286,18 @@ private:
 			curr = curr->next;
 		}
 		return data;
+	}
+	// Copies all element from given iterator range, returns a pointer to the first element, or a nullptr if the range was empty
+	template <typename It>
+	Node<T> *copy_from_iterrange(It b, It e) {
+	    if (b == e)
+	        return nullptr;
+        Node<T> *data = new Node<T>(*b++), *curr = data;
+        while (b != e) {
+            curr->next = new Node<T>(*b++);
+            curr = curr->next;
+        }
+        return data;
 	}
 	
 	// Deletes each element from front to back
