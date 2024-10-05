@@ -389,7 +389,7 @@ private:
 	Node<T> *head = nullptr;
 
 	// Dummy Node whose next pointer should point to head
-	Node<T> *dummy = new Node<T>(T());
+	Node<T> *dummy = new Node<T>();
 };
 
 // Node class, data members managed by friend classes
@@ -401,6 +401,7 @@ class Node {
 	friend class LinkedListIterator<T>;
 	friend class LinkedListConstIterator<T>;
 public:
+	Node() = default;
 	// Constructs a Node, with the copy of the given value, and a null next pointer
 	Node(const T &e) : val(e), next(nullptr) {}
 	// Constructs a Node, moving the given value, and making the next pointer null
