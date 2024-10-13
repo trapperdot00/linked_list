@@ -11,7 +11,7 @@ void print_node_chain(const Node<T> &n) {
 	const Node<T> *p = &n;
 	while (p) {
 		cout << *p << ' ';
-		p = p->getNext();
+		p = dynamic_cast<const Node<T> *>(p->getNext());
 	}
 	cout << endl;
 }
