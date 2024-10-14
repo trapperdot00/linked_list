@@ -3,19 +3,14 @@
 
 #include "Node.h"
 #include "LinkedListExcept.h"
+#include "LinkedListIteratorBase.h"
 
 template <typename T> class LinkedList;
 template <typename T> class LinkedListConstIterator;
-template <typename T> bool operator==
-	(const LinkedListConstIterator<T> &, const LinkedListConstIterator<T> &);
-template <typename T> bool operator!=
-	(const LinkedListConstIterator<T> &, const LinkedListConstIterator<T> &);
 
 template <typename T>
-class LinkedListConstIterator {
+class LinkedListConstIterator : public LinkedListIteratorBase {
 	friend class LinkedList<T>;
-	friend bool operator== <T>
-		(const LinkedListConstIterator &, const LinkedListConstIterator &);
 public:
 	typedef T value_type;
 	typedef const value_type & const_reference;
@@ -29,13 +24,11 @@ public:
 
 	LinkedListConstIterator &operator++();
 	LinkedListConstIterator operator++(int);
-
-private:
-	NodeBase *curr = nullptr;
 };
 
 template <typename T>
-LinkedListConstIterator<T>::LinkedListConstIterator(NodeBase *p) : curr(p) {}
+LinkedListConstIterator<T>::LinkedListConstIterator(NodeBase *p)
+	: LinkedListIteratorBase(p) {}
 
 template <typename T>
 typename LinkedListConstIterator<T>::const_reference
@@ -67,18 +60,6 @@ LinkedListConstIterator<T> LinkedListConstIterator<T>::operator++(int) {
 	LinkedListConstIterator ret = *this;
 	++*this;
 	return ret;
-}
-
-template <typename T>
-bool operator==
-(const LinkedListConstIterator<T> &lhs, const LinkedListConstIterator<T> &rhs) {
-	return lhs.curr == rhs.curr;
-}
-
-template <typename T>
-bool operator!=
-(const LinkedListConstIterator<T> &lhs, const LinkedListConstIterator<T> &rhs) {
-	return !(lhs == rhs);
 }
 
 #endif

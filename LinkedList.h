@@ -284,6 +284,19 @@ template <typename T>
 typename LinkedList<T>::iterator
 LinkedList<T>::insert_after(const_iterator pos, std::initializer_list<value_type> il)
 */
+
+template <typename T>
+typename LinkedList<T>::iterator
+LinkedList<T>::erase_after(const_iterator pos) {
+	if (!pos.curr)
+		return iterator(pos.curr);
+	NodeBase *next = pos.curr->getNext(),
+			 *newnext = next->getNext();
+	delete next;
+	pos.curr->setNext(newnext);
+	return iterator(newnext);
+}
+
 template <typename T>
 NodeBase *LinkedList<T>::copy_list(const LinkedList &other) {
 	if (other.empty())
